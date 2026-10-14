@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Pothole Rider</title>
+<style>
+  *{box-sizing:border-box} html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#8ec5e8;font-family:Arial,sans-serif;touch-action:none}
+  #game{position:fixed;inset:0} canvas{display:block}
+  #hud{position:fixed;top:12px;left:12px;right:12px;display:flex;justify-content:space-between;gap:8px;pointer-events:none;color:#fff;text-shadow:0 2px 4px #000;font-weight:bold}
+  .pill{background:#10202dcc;border:1px solid #ffffff55;border-radius:12px;padding:8px 11px;font-size:14px}
+  #message{position:fixed;top:43%;left:50%;transform:translate(-50%,-50%);width:min(88%,420px);padding:20px;background:#10202eeF;border:1px solid #ffffff66;border-radius:18px;text-align:center;color:white}
+  #message h1{margin:0 0 8px;font-size:27px}#message p{line-height:1.45;font-size:14px}
+  button{border:0;border-radius:14px;padding:13px 18px;font-size:16px;font-weight:bold;background:#ffd54a;color:#18212b}
+  #controls{position:fixed;left:0;right:0;bottom:18px;display:flex;justify-content:space-between;padding:0 18px;align-items:end;pointer-events:none}
+  .cluster{display:flex;gap:12px;pointer-events:auto}.control{width:72px;height:64px;background:#142331bb;color:#fff;border:2px solid #ffffff88;border-radius:18px;font-size:25px;touch-action:none;user-select:none}
+  .control.brake{width:82px;background:#b52b2bcc;font-size:15px}
+  #hint{position:fixed;bottom:92px;left:0;right:0;text-align:center;color:#fff;font-size:12px;text-shadow:0 2px 4px #000;pointer-events:none}
+</style>
+</head>
+<body>
+<div id="game"></div>
+<div id="hud"><div class="pill">🏁 Score: <span id="score">0</span></div><div class="pill">⚡ Speed: <span id="speed">35</span> km/h</div><div class="pill">Level <span id="level">1</span></div></div>
+<div id="message"><h1>🛵 Pothole Rider</h1><p>Ride along an Indian road. Avoid potholes and traffic. Use the left and right buttons to steer and hold BRAKE to slow down.</p><button id="start">START RIDE</button></div>
+<div id="hint">Steer to avoid potholes • Brake when traffic gets close</div>
+<div id="controls"><div class="cluster"><button class="control" id="left">◀</button><button class="control" id="right">▶</button></div><div class="cluster"><button class="control brake" id="brake">BRAKE</button></div></div>
+<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+<script>
+(() => {
+const root=document.getElementById('game');
+const scene=new THREE.Scene(); scene.background=new THREE.Color(0x9bcde8); scene.fog=new THREE.Fog(0x9bcde8,55,190);
+const camera=new THREE.PerspectiveCamera(68,innerWidth/innerHeight,.1,400); camera.position.set(0,3.3,8.5); camera.rotation.x=-.16;
+const renderer=new THREE.WebGLRenderer({antialias:true}); renderer.setPixelRatio(Math.min(devicePixelRatio,1.7)); renderer.setSize(innerWidth,innerHeight); renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFSoftShadowMap; root.appendChild(renderer.domElement);
+scene.add(new THREE.HemisphereLight(0xffffff,0x59634d,2));
+const sun=new THREE.DirectionalLight(0xffffff,2.1); sun.position.set(-12,24,8); sun.castShadow=true; scene.add(sun);
+const mat=(color,roughness=1)=>new THREE.MeshStandardMaterial({color,roughness});
+const asphalt=mat(0x34383a), shoulder=mat(0x8b8877), white=mat(0xf3f0dd), dirt=mat(0x5d594d), green=mat(0x46784a);
+const road=new THREE.Mesh(new THREE.PlaneGeometry(12,260),asphalt); road.rotation.x=-Math.PI/2; road.position.set(0,-.06,-95); road.receiveShadow=true; scene.add(road);
+const ground=new THREE.Mesh(new THREE.PlaneGeometry(220,300),green); ground.rotation.x=-Math.PI/2; ground.position.set(0,-.13,-100); scene.add(ground);
+for(const x of [-6.4,6.4]){let s=new THREE.Mesh(new THREE.BoxGeometry(.8,.12,260),shoulder);s.position.set(x,-.01,-95);scene.add(s)}
+const laneMarks=[];
+for(let z=12;z>-245;z-=9){let m=new THREE.Mesh(new THREE.BoxGeometry(.12,.025,4),white);m.position.set(0,.015,z);scene.add(m);laneMarks.push(m)}
+// Distant roadside trees and modest buildings
+const roadside=[];
+function tree(x,z){const g=new THREE.Group();let trunk=new THREE.Mesh(new THREE.CylinderGeometry(.16,.24,2.2,7),mat(0x65472f));trunk.position.y=1.1;g.add(trunk);let crown=new THREE.Mesh(new THREE.SphereGeometry(1.15,8,7),mat([0x28643b,0x397744,0x547b3d][Math.floor(Math.random()*3)]));crown.position.y=2.65;crown.scale.set(1,1.1,.9);g.add(crown);g.position.set(x,0,z);scene.add(g);roadside.push(g)}
+for(let z=-15;z>-230;z-=12){tree(-9-Math.random()*5,z);tree(9+Math.random()*5,z-4)}
+function building(x,z){let h=3+Math.random()*5,w=3+Math.random()*4;let b=new THREE.Mesh(new THREE.BoxGeometry(w,h,4),mat([0xc9b99a,0xb5c3c4,0xd0a58b][Math.floor(Math.random()*3)]));b.position.set(x,h/2,z);scene.add(b);roadside.push(b)}
+for(let z=-28;z>-220;z-=28){building(-15-Math.random()*3,z);building(15+Math.random()*3,z-10)}
+// Scooter dashboard / handlebars in foreground
+const scooter=new THREE.Group();scene.add(scooter);
+let body=new THREE.Mesh(new THREE.BoxGeometry(.8,.32,.85),mat(0x1677bd));body.position.set(0,.65,0);scooter.add(body);
+let front=new THREE.Mesh(new THREE.CylinderGeometry(.28,.28,.18,16),mat(0x151719));front.rotation.z=Math.PI/2;front.position.set(0,.28,-.42);scooter.add(front);
+let handle=new THREE.Mesh(new THREE.CylinderGeometry(.055,.055,1.45,10),mat(0x202428));handle.rotation.z=Math.PI/2;handle.position.set(0,1.05,-.05);scooter.add(handle);
+for(let x of [-.66,.66]){let grip=new THREE.Mesh(new THREE.CylinderGeometry(.09,.09,.28,10),mat(0x17191b));grip.rotation.z=Math.PI/2;grip.position.set(x,1.05,-.05);scooter.add(grip)}
+scooter.position.set(0,-.05,4.4);camera.position.set(0,2.6,8.7);camera.lookAt(0,1.2,-8);
+// Objects approaching the rider
+const potholes=[],traffic=[];
+function makePothole(z){const g=new THREE.Group();const outer=new THREE.Mesh(new THREE.CircleGeometry(.72+Math.random()*.35,16),mat(0x171919));outer.rotation.x=-Math.PI/2;outer.position.y=.01;g.add(outer);const inner=new THREE.Mesh(new THREE.CircleGeometry(.49+Math.random()*.24,14),mat(0x080a0b));inner.rotation.x=-Math.PI/2;inner.position.y=.016;g.add(inner);g.position.set([-3.8,-2.5,0,2.5,3.8][Math.floor(Math.random()*5)],0,z);scene.add(g);potholes.push(g)}
+function vehicle(color,type,z){const g=new THREE.Group();const car=type==='bus',auto=type==='auto',bike=type==='bike';let w=car?2.35:auto?1.25:bike?.55:1.65;let h=car?2.3:auto?1.35:bike?1.15:1.25;let l=car?5.2:auto?2.3:bike?1.8:3.2;
+let base=new THREE.Mesh(new THREE.BoxGeometry(w,h,l),mat(color));base.position.y=h/2+.18;g.add(base);
+let cab=new THREE.Mesh(new THREE.BoxGeometry(w*.78,h*.45,l*.42),mat(car?0x9cc9d7:0x343c43));cab.position.set(0,h*.95,-l*.05);g.add(cab);
+for(let zz of [-l*.32,l*.32])for(let xx of [-w*.48,w*.48]){let wh=new THREE.Mesh(new THREE.CylinderGeometry(.22,.22,.14,10),mat(0x111111));wh.rotation.z=Math.PI/2;wh.position.set(xx,.28,zz);g.add(wh)}
+g.position.set([-4,-2,2,4][Math.floor(Math.random()*4)],0,z);scene.add(g);traffic.push({g,speed:12+Math.random()*12,type})}
+const types=[['car',0xd9d6cc],['car',0xb92f28],['auto',0xd9a91d],['bus',0x2675a8],['bike',0x282b30],['car',0xeeeeee]];
+let running=false,steer=0,braking=false,score=0,speed=35,elapsed=0,spawn=0,damageFlash=0;
+const $=id=>document.getElementById(id);
+function bindHold(id,fn){const el=$(id);el.addEventListener('pointerdown',e=>{e.preventDefault();fn(true);el.setPointerCapture(e.pointerId)});for(const ev of ['pointerup','pointercancel','lostpointercapture'])el.addEventListener(ev,e=>{e.preventDefault();fn(false)})}
+bindHold('left',v=>{if(v)steer=-1;else if(steer===-1)steer=0});bindHold('right',v=>{if(v)steer=1;else if(steer===1)steer=0});bindHold('brake',v=>braking=v);
+addEventListener('keydown',e=>{if(e.key==='ArrowLeft'||e.key==='a')steer=-1;if(e.key==='ArrowRight'||e.key==='d')steer=1;if(e.key===' '||e.key==='ArrowDown')braking=true});
+addEventListener('keyup',e=>{if(['ArrowLeft','ArrowRight','a','d'].includes(e.key))steer=0;if(e.key===' '||e.key==='ArrowDown')braking=false});
+$('start').onclick=()=>{$('message').style.display='none';running=true;};
+function reset(){score=0;speed=35;elapsed=0;spawn=0;for(const p of potholes)scene.remove(p);potholes.length=0;for(const t of traffic)scene.remove(t.g);traffic.length=0;scooter.position.x=0}
+function hit(){damageFlash=.35;score=Math.max(0,score-25);camera.position.y=2.25}
+function animate(){requestAnimationFrame(animate);const dt=Math.min(.04,clock.getDelta());if(running){elapsed+=dt;speed=braking?Math.max(12,speed-30*dt):Math.min(78,speed+2*dt);const travel=speed/3.6*dt;
+scooter.position.x=THREE.MathUtils.clamp(scooter.position.x+steer*dt*5.3,-4.7,4.7);scooter.rotation.z=THREE.MathUtils.lerp(scooter.rotation.z,-steer*.09,.12);camera.position.x=THREE.MathUtils.lerp(camera.position.x,scooter.position.x*.36,.08);camera.position.y=2.6+(Math.random()-.5)*.025;camera.lookAt(scooter.position.x*.5,1.15,-8);
+laneMarks.forEach(m=>{m.position.z+=travel;if(m.position.z>14)m.position.z-=252});
+roadside.forEach(o=>{o.position.z+=travel;if(o.position.z>20)o.position.z-=250});
+spawn-=dt;if(spawn<=0){makePothole(-120-Math.random()*25);if(Math.random()<.8){const t=types[Math.floor(Math.random()*types.length)];vehicle(t[1],t[0],-150-Math.random()*40)}spawn=Math.max(.42,1.35-elapsed*.004)+Math.random()*.6}
+for(let i=potholes.length-1;i>=0;i--){let p=potholes[i];p.position.z+=travel;if(Math.abs(p.position.z-4.4)<1.6&&Math.abs(p.position.x-scooter.position.x)<.95){hit();scene.remove(p);potholes.splice(i,1)}else if(p.position.z>15){scene.remove(p);potholes.splice(i,1);score+=5}}
+for(let i=traffic.length-1;i>=0;i--){let t=traffic[i];t.g.position.z+=(speed/3.6-t.speed/3.6)*dt+travel*.45;if(Math.abs(t.g.position.z-4.4)<2.2&&Math.abs(t.g.position.x-scooter.position.x)<1.15){score=Math.max(0,score-40);t.g.position.z=18}if(t.g.position.z>18){scene.remove(t.g);traffic.splice(i,1);score+=3}}
+if(damageFlash>0){damageFlash-=dt;camera.position.y=2.25+Math.random()*.18}
+$('score').textContent=Math.floor(score+elapsed*2);$('speed').textContent=Math.round(speed);$('level').textContent=1+Math.floor(elapsed/35);
+}renderer.render(scene,camera)}
+const clock=new THREE.Clock();animate();
+addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight)});
+})();
+</script>
+</body>
+</html>
